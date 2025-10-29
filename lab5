@@ -1,0 +1,217 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 1. Генерация двух множеств точек
+np.random.seed(42)  # для воспроизводимости результатов
+
+# Первоначальные точки для каждого класса
+center1 = np.array([2, 3])
+center2 = np.array([8, 7])
+
+# Генерация точек вокруг первоначальных (10-15 точек каждого класса)
+n_points1 = 12
+n_points2 = 13
+
+# Класс C1 - нормальное распределение вокруг center1
+points1 = np.random.normal(loc=center1, scale=1.2, size=(n_points1, 2))
+
+# Класс C2 - равномерное распределение вокруг center2
+points2 = np.random.uniform(low=center2-2, high=center2+2, size=(n_points2, 2))
+
+# Находим точки, максимально удаленные от первоначальных
+def find_farthest_point(center, points):
+    distances = np.sqrt(np.sum((points - center)**2, axis=1))
+    farthest_idx = np.argmax(distances)
+    return points[farthest_idx], distances[farthest_idx]
+
+farthest1, dist1 = find_farthest_point(center1, points1)
+farthest2, dist2 = find_farthest_point(center2, points2)
+
+print(f"Самая удаленная точка от center1: {farthest1}, расстояние: {dist1:.2f}")
+print(f"Самая удаленная точка от center2: {farthest2}, расстояние: {dist2:.2f}")
+
+# 2. Визуализация точек
+plt.figure(figsize=(12, 5))
+
+# Первый график - визуальная проверка непересекаемости
+plt.subplot(1, 2, 1)
+plt.scatter(points1[:, 0], points1[:, 1], c='blue', label='Класс C1', alpha=0.7)
+plt.scatter(points2[:, 0], points2[:, 1], c='red', label='Класс C2', alpha=0.7)
+plt.scatter(center1[0], center1[1], c='darkblue', marker='*', s=200, label='Центр C1')
+plt.scatter(center2[0], center2[1], c='darkred', marker='*', s=200, label='Центр C2')
+plt.scatter(farthest1[0], farthest1[1], c='blue', marker='s', s=100, label='Самая удаленная C1')
+plt.scatter(farthest2[0], farthest2[1], c='red', marker='s', s=100, label='Самая удаленная C2')
+plt.xlabel('x1')
+plt.ylabel('x2')
+plt.title('Визуальная проверка непересекаемости точек')
+plt.legend()
+plt.grid(True, alpha=0.3)
+
+# 3. Создание данных для обучения
+X = np.vstack([points1, points2])  # объединяем все точки
+# Метки классов: 1 для C1, -1 для C2
+y = np.hstack([np.ones(n_points1), -np.ones(n_points2)])
+
+# Добавляем смещение (x3 = 1)
+X_with_bias = np.column_stack([X, np.ones(len(X))])
+
+# 4. Реализация персептрона с градиентным спуском
+class SimplePerceptron:
+    def __init__(self, learning_rate=0.01, max_epochs=1000):
+        self.learning_rate = learning_rate
+        self.max_epochs = max_epochs
+        self.weights = None
+        self.errors_history = []
+    
+    def activation(self, x):
+        """Функция активации: 1 если x >= 0, -1 если x < 0"""
+        return np.where(x >= 0, 1, -1)
+    
+    def fit(self, X, y):
+        """Обучение персептрона с помощью градиентного спуска"""
+        n_samples, n_features = X.shape
+        # Инициализация весов случайными значениями
+        self.weights = np.random.normal(0, 0.1, n_features)
+        
+        for epoch in range(self.max_epochs):
+            total_error = 0
+            
+            for i in range(n_samples):
+                # Прямое распространение
+                linear_output = np.dot(X[i], self.weights)
+                prediction = self.activation(linear_output)
+                
+                # Вычисление ошибки
+                error = y[i] - prediction
+                
+                # Обновление весов (градиентный спуск)
+                self.weights += self.learning_rate * error * X[i]
+                
+                # Накопление ошибки для мониторинга
+                total_error += error ** 2
+            
+            self.errors_history.append(total_error)
+            
+            # Критерий остановки
+            if total_error == 0:
+                print(f"Обучение завершено на эпохе {epoch + 1}")
+                break
+            
+            if epoch % 100 == 0:
+                print(f"Эпоха {epoch}, Ошибка: {total_error:.4f}")
+    
+    def predict(self, X):
+        """Предсказание классов"""
+        linear_output = np.dot(X, self.weights)
+        return self.activation(linear_output)
+    
+    def get_decision_boundary(self, x_range):
+        """Получить линию разделения для визуализации"""
+        # Уравнение: w1*x1 + w2*x2 + w3 = 0
+        # => x2 = (-w1*x1 - w3) / w2
+        w1, w2, w3 = self.weights
+        x1_vals = np.array(x_range)
+        x2_vals = (-w1 * x1_vals - w3) / w2
+        return x1_vals, x2_vals
+
+# 5. Обучение персептрона
+perceptron = SimplePerceptron(learning_rate=0.01, max_epochs=1000)
+perceptron.fit(X_with_bias, y)
+
+# 6. Проверка точности
+predictions = perceptron.predict(X_with_bias)
+accuracy = np.mean(predictions == y)
+print(f"Точность классификации: {accuracy * 100:.2f}%")
+print(f"Найденные веса: {perceptron.weights}")
+
+# 7. Визуализация результатов классификации
+plt.subplot(1, 2, 2)
+
+# Разделяющая линия
+x_range = [np.min(X[:, 0]) - 1, np.max(X[:, 0]) + 1]
+x1_line, x2_line = perceptron.get_decision_boundary(x_range)
+
+# Точки с предсказанными классами
+plt.scatter(X[predictions == 1, 0], X[predictions == 1, 1], 
+           c='lightblue', edgecolors='blue', label='Предсказано C1', alpha=0.7)
+plt.scatter(X[predictions == -1, 0], X[predictions == -1, 1], 
+           c='lightcoral', edgecolors='red', label='Предсказано C2', alpha=0.7)
+
+# Истинные классы (обводки)
+plt.scatter(points1[:, 0], points1[:, 1], c='none', edgecolors='blue', 
+           linewidths=2, s=80, label='Истинный C1')
+plt.scatter(points2[:, 0], points2[:, 1], c='none', edgecolors='red', 
+           linewidths=2, s=80, label='Истинный C2')
+
+# Разделяющая линия
+plt.plot(x1_line, x2_line, 'g-', linewidth=3, label='Разделяющая линия')
+plt.fill_between(x1_line, x2_line, np.min(X[:, 1]) - 1, alpha=0.2, color='red')
+plt.fill_between(x1_line, x2_line, np.max(X[:, 1]) + 1, alpha=0.2, color='blue')
+
+plt.xlabel('x1')
+plt.ylabel('x2')
+plt.title(f'Классификация персептроном (Точность: {accuracy*100:.1f}%)')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.axis('equal')
+
+plt.tight_layout()
+plt.show()
+
+# 8. Визуализация процесса обучения
+plt.figure(figsize=(10, 4))
+
+plt.subplot(1, 2, 1)
+plt.plot(perceptron.errors_history)
+plt.xlabel('Эпоха')
+plt.ylabel('Суммарная ошибка')
+plt.title('Сходимость градиентного спуска')
+plt.grid(True, alpha=0.3)
+
+# 9. Дополнительная визуализация - тепловая карта решений
+plt.subplot(1, 2, 2)
+
+# Создаем сетку для тепловой карты
+xx, yy = np.meshgrid(np.linspace(0, 10, 100), np.linspace(0, 10, 100))
+grid_points = np.c_[xx.ravel(), yy.ravel()]
+grid_points_with_bias = np.column_stack([grid_points, np.ones(len(grid_points))])
+
+# Предсказания для сетки
+Z = perceptron.predict(grid_points_with_bias)
+Z = Z.reshape(xx.shape)
+
+# Тепловая карта решений
+plt.contourf(xx, yy, Z, alpha=0.3, cmap='coolwarm')
+plt.scatter(points1[:, 0], points1[:, 1], c='blue', label='C1', alpha=0.7)
+plt.scatter(points2[:, 0], points2[:, 1], c='red', label='C2', alpha=0.7)
+plt.plot(x1_line, x2_line, 'g-', linewidth=2, label='Граница решения')
+plt.xlabel('x1')
+plt.ylabel('x2')
+plt.title('Области решений персептрона')
+plt.legend()
+plt.grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+
+# 10. Анализ результатов
+print("\n" + "="*50)
+print("АНАЛИЗ РЕЗУЛЬТАТОВ:")
+print("="*50)
+print(f"Разделяющая линия: {perceptron.weights[0]:.3f}*x1 + {perceptron.weights[1]:.3f}*x2 + {perceptron.weights[2]:.3f} = 0")
+print(f"Угловой коэффициент k: {-perceptron.weights[0]/perceptron.weights[1]:.3f}")
+print(f"Смещение: {perceptron.weights[2]:.3f}")
+
+# Проверка на тестовых точках
+test_points = np.array([
+    [1, 2],   # Должна быть C1
+    [9, 8],   # Должна быть C2  
+    [5, 5]    # Пограничная область
+])
+test_points_with_bias = np.column_stack([test_points, np.ones(len(test_points))])
+test_predictions = perceptron.predict(test_points_with_bias)
+
+print("\nПроверка на тестовых точках:")
+for i, point in enumerate(test_points):
+    class_name = "C1" if test_predictions[i] == 1 else "C2"
+    print(f"Точка {point} → Класс {class_name}")
