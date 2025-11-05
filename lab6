@@ -1,0 +1,208 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import random
+
+class XORNeuralNetwork:
+    def __init__(self, input_size=2, hidden_size=4, output_size=1):
+        self.X = None
+        self.y = None
+        
+        # Архитектура сети
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        
+        # Инициализация весов
+        self.W1 = None
+        self.b1 = None
+        self.W2 = None
+        self.b2 = None
+        
+        self.centers = [[0, 0], [0, 1], [1, 0], [1, 1]]
+        self.colors = ['blue', 'red', 'green', 'orange']
+
+    def initialize_weights(self):
+        """инициализация весов (Xavier/Glorot)"""
+        # Веса для скрытого слоя
+        self.W1 = np.random.randn(self.input_size, self.hidden_size) * np.sqrt(2.0 / self.input_size)
+        self.b1 = np.zeros((1, self.hidden_size))
+        
+        # Веса для выходного слоя
+        self.W2 = np.random.randn(self.hidden_size, self.output_size) * np.sqrt(2.0 / self.hidden_size)
+        self.b2 = np.zeros((1, self.output_size))
+
+    def generate_data(self, points_per_class=50):
+        """Генерация данных для XOR"""
+        np.random.seed(42)
+        X = []
+        y = []
+        
+        for i, center in enumerate(self.centers):
+            for _ in range(points_per_class):
+                x1 = center[0] + random.uniform(-0.2, 0.2)
+                x2 = center[1] + random.uniform(-0.2, 0.2)
+                X.append([x1, x2])
+                
+                # XOR логика: класс 1 когда входы разные
+                if i in [0, 3]:  # (0,0) и (1,1)
+                    y.append(0)
+                else:  # (0,1) и (1,0)
+                    y.append(1)
+        
+        self.X = np.array(X)
+        self.y = np.array(y)
+        return self.X, self.y
+
+    def sigmoid(self, x):
+        """Сигмоидная функция активации"""
+        # Защита от переполнения
+        x = np.clip(x, -250, 250)
+        return 1 / (1 + np.exp(-x))
+
+    def sigmoid_derivative(self, x):
+        """роизводная сигмоидной функции"""
+        s = self.sigmoid(x)
+        return s * (1 - s)
+
+    def forward(self, X):
+        """Прямой проход через сеть"""
+        # Скрытый слой
+        self.hidden_input = np.dot(X, self.W1) + self.b1
+        self.hidden_output = self.sigmoid(self.hidden_input)
+        
+        # Выходной слой
+        self.final_input = np.dot(self.hidden_output, self.W2) + self.b2
+        self.final_output = self.sigmoid(self.final_input)
+        
+        return self.final_output
+
+    def backward(self, X, y, learning_rate):
+        """Обратное распространение ошибки"""
+        m = X.shape[0]  # количество примеров
+        
+        # Градиенты выходного слоя
+        dZ2 = self.final_output - y.reshape(-1, 1)
+        dW2 = (1/m) * np.dot(self.hidden_output.T, dZ2)
+        db2 = (1/m) * np.sum(dZ2, axis=0, keepdims=True)
+        
+        # Градиенты скрытого слоя
+        dZ1 = np.dot(dZ2, self.W2.T) * self.sigmoid_derivative(self.hidden_input)
+        dW1 = (1/m) * np.dot(X.T, dZ1)
+        db1 = (1/m) * np.sum(dZ1, axis=0, keepdims=True)
+        
+        # Обновление весов
+        self.W2 -= learning_rate * dW2
+        self.b2 -= learning_rate * db2
+        self.W1 -= learning_rate * dW1
+        self.b1 -= learning_rate * db1
+
+    def compute_loss(self, y_true, y_pred):
+        """Вычисление среднеквадратичной ошибки"""
+        return np.mean((y_true.reshape(-1, 1) - y_pred) ** 2)
+
+    def train(self, epochs=10000, learning_rate=0.1, verbose=True):
+        """Обучение нейронной сети"""
+        # Инициализация весов
+        self.initialize_weights()
+        
+        # История ошибок для визуализации
+        losses = []
+        
+        for epoch in range(epochs):
+            # Прямой проход
+            y_pred = self.forward(self.X)
+            
+            # Вычисление ошибки
+            loss = self.compute_loss(self.y, y_pred)
+            losses.append(loss)
+            
+            # Обратный проход
+            self.backward(self.X, self.y, learning_rate)
+            
+            # Вывод прогресса
+            if verbose and epoch % 2000 == 0:
+                print(f"Эпоха {epoch}, Ошибка: {loss:.6f}")
+        
+        return losses
+
+    def predict(self, X):
+        """Предсказание для новых данных"""
+        output = self.forward(X)
+        return (output > 0.5).astype(int), output
+
+    def evaluate(self):
+        """Оценка качества модели на тестовых данных"""
+        test_points = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
+        
+        print("\nТестирование на XOR таблице истинности:")
+        print("Вход -> Предсказание (Вероятность) -> Класс")
+        print("-" * 50)
+        
+        for point in test_points:
+            prediction, probability = self.predict(point.reshape(1, -1))
+            print(f"{point} -> {probability[0][0]:.4f} -> {prediction[0][0]}")
+
+    def visualize_training(self, losses):
+        """Визуализация процесса обучения"""
+        plt.figure(figsize=(15, 5))
+        
+        # 1. График ошибки
+        plt.subplot(1, 3, 1)
+        plt.plot(losses)
+        plt.title('Сходимость обучения')
+        plt.xlabel('Эпоха')
+        plt.ylabel('Ошибка')
+        plt.grid(True, alpha=0.3)
+        
+        # 2. Исходные данные
+        plt.subplot(1, 3, 2)
+        for i, center in enumerate(self.centers):
+            mask = (np.abs(self.X[:, 0] - center[0]) < 0.3) & (np.abs(self.X[:, 1] - center[1]) < 0.3)
+            plt.scatter(self.X[mask, 0], self.X[mask, 1], c=self.colors[i], label=f'Центр {i}', alpha=0.7)
+        plt.title('Исходные данные')
+        plt.xlabel('X1')
+        plt.ylabel('X2')
+        plt.legend()
+        
+        # 3. Предсказания сети
+        plt.subplot(1, 3, 3)
+        predictions, _ = self.predict(self.X)
+        class_0 = predictions.flatten() == 0
+        class_1 = predictions.flatten() == 1
+        
+        plt.scatter(self.X[class_0, 0], self.X[class_0, 1], c='lightblue', label='Класс 0', alpha=0.7)
+        plt.scatter(self.X[class_1, 0], self.X[class_1, 1], c='lightcoral', label='Класс 1', alpha=0.7)
+        plt.title('Предсказания сети')
+        plt.xlabel('X1')
+        plt.ylabel('X2')
+        plt.legend()
+        
+        plt.tight_layout()
+        plt.show()
+
+def main():
+    """Демонстрация работы исправленной нейронной сети"""
+    print("НЕЙРОННАЯ СЕТЬ ДЛЯ XOR")
+    print("=" * 50)
+    
+    # Создаем и обучаем сеть
+    nn = XORNeuralNetwork(hidden_size=4)
+    
+    # Генерируем данные
+    X, y = nn.generate_data(50)
+    print(f"Сгенерировано {len(X)} примеров")
+    
+    # Обучаем сеть
+    print("\nНачало обучения...")
+    losses = nn.train(epochs=10000, learning_rate=0.1)
+    
+    # Тестируем
+    nn.evaluate()
+    
+    # Визуализируем
+    nn.visualize_training(losses)
+    
+    print("\nОбучение завершено успешно!")
+
+if __name__ == "__main__":
+    main()
